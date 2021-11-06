@@ -1,5 +1,5 @@
 requests
-youtube_dl
+youtube_dl==2020.05.08
 git+git://github.com/google/chatbase-python.git
 tgcrypto
 Pillow

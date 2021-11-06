@@ -8,9 +8,11 @@ logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+from datetime import datetime
 import os
 import shutil
 import subprocess
+import time
 
 # the secret configuration specific things
 if bool(os.environ.get("WEBHOOK", False)):
@@ -46,17 +48,19 @@ def unzip(bot, update):
     if ((reply_message is not None) and
         (reply_message.document is not None) and
         (reply_message.document.file_name.endswith(Translation.UNZIP_SUPPORTED_EXTENSIONS))):
+        start = datetime.now()
         a = bot.send_message(
             chat_id=update.chat.id,
             text=Translation.DOWNLOAD_START,
             reply_to_message_id=update.message_id
         )
+        c_time = time.time()
         try:
             bot.download_media(
                 message=reply_message,
                 file_name=saved_file_path,
                 progress=progress_for_pyrogram,
-                progress_args=(Translation.DOWNLOAD_START, a.message_id, update.chat.id)
+                progress_args=(Translation.DOWNLOAD_START, a.message_id, update.chat.id, c_time)
             )
         except (ValueError) as e:
             bot.edit_message_text(
@@ -79,9 +83,10 @@ def unzip(bot, update):
                 text=Translation.EXTRACT_ZIP_INTRO_THREE,
                 message_id=a.message_id
             )
+            end_one = datetime.now()
             try:
                 command_to_exec = [
-                    "7z",
+                    "7za",
                     "e",
                     "-o" + extract_dir_path,
                     saved_file_path
