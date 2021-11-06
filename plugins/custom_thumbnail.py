@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# (c) Shrimadhav U K
-
-# the logging things
 import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -10,25 +5,76 @@ logger = logging.getLogger(__name__)
 
 import numpy
 import os
-from PIL import Image
 import time
 
-# the secret configuration specific things
-if bool(os.environ.get("WEBHOOK", False)):
-    from sample_config import Config
-else:
-    from config import Config
-
-# the Strings used for this "thing"
+from config import Config
+from PIL import Image
 from translation import Translation
 
+import database.database as sql
 import pyrogram
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
+from pyrogram import Client, Filters 
 
-from helper_funcs.chat_base import TRChatBase
+@Client.on_message(Filters.photo)
+async def save_photo(bot, update):
+    if update.from_user.id in Config.BANNED_USER:
+        await bot.delete_messages(
+            chat_id=update.chat.id,
+            message_ids=update.message_id,
+            revoke=True
+        )
+        return
+    if update.media_group_id is not None:
+        # album is sent
+        download_location = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id) + "/" + str(update.media_group_id) + "/"
+        # create download directory, if not exist
+        if not os.path.isdir(download_location):
+            os.makedirs(download_location)
+        await sql.df_thumb(update.from_user.id, update.message_id)
+        await bot.download_media(
+            message=update,
+            file_name=download_location
+        )
+    else:
+        # received single photo
+        download_location = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id) + ".jpg"
+        await bot.download_media(
+            message=update,
+            file_name=download_location
+        )
+        await sql.df_thumb(update.from_user.id, update.message_id)
+        await bot.send_message(
+            chat_id=update.chat.id,
+            text=Translation.SAVED_CUSTOM_THUMB_NAIL,
+            reply_to_message_id=update.message_id
+        )
 
 
-@pyrogram.Client.on_message(pyrogram.Filters.command(["generatecustomthumbnail"]))
+@Client.on_message(Filters.command(["deletethumbnail"]))
+async def delete_thumbnail(bot, update):
+    if update.from_user.id in Config.BANNED_USER:
+        await bot.delete_messages(
+            chat_id=update.chat.id,
+            message_ids=update.message_id,
+            revoke=True
+        )
+        return
+    download_location = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id)
+    try:
+        await sql.del_thumb(update.from_user.id)
+        os.remove(download_location + ".jpg")
+        # os.remove(download_location + ".json")
+    except:
+        pass
+    await bot.send_message(
+        chat_id=update.chat.id,
+        text=Translation.DEL_ETED_CUSTOM_THUMB_NAIL,
+        reply_to_message_id=update.message_id
+    )
+    
+    
+@Client.on_message(pyrogram.Filters.command(["generatecustomthumbnail"]))
 def generate_custom_thumbnail(bot, update):
     TRChatBase(update.from_user.id, update.text, "generatecustomthumbnail")
     if str(update.from_user.id) not in Config.SUPER7X_DLBOT_USERS:
@@ -82,71 +128,3 @@ def generate_custom_thumbnail(bot, update):
             text=Translation.REPLY_TO_MEDIA_ALBUM_TO_GEN_THUMB,
             reply_to_message_id=update.message_id
         )
-
-
-@pyrogram.Client.on_message(pyrogram.Filters.photo)
-def save_photo(bot, update):
-    TRChatBase(update.from_user.id, update.text, "save_photo")
-    if str(update.from_user.id) in Config.BANNED_USERS:
-        bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.ABUSIVE_USERS,
-            reply_to_message_id=update.message_id,
-            disable_web_page_preview=True,
-            parse_mode=pyrogram.ParseMode.HTML
-        )
-        return
-    if update.media_group_id is not None:
-        if str(update.from_user.id) not in Config.SUPER7X_DLBOT_USERS:
-            bot.send_message(
-                chat_id=update.chat.id,
-                text=Translation.NOT_AUTH_USER_TEXT,
-                reply_to_message_id=update.message_id
-            )
-            return
-        # album is sent
-        download_location = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id) + "/" + str(update.media_group_id) + "/"
-        # create download directory, if not exist
-        if not os.path.isdir(download_location):
-            os.makedirs(download_location)
-        bot.download_media(
-            message=update,
-            file_name=download_location
-        )
-    else:
-        # received single photo
-        download_location = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id) + ".jpg"
-        bot.download_media(
-            message=update,
-            file_name=download_location
-        )
-        bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.SAVED_CUSTOM_THUMB_NAIL,
-            reply_to_message_id=update.message_id
-        )
-
-
-@pyrogram.Client.on_message(pyrogram.Filters.command(["deletethumbnail"]))
-def delete_thumbnail(bot, update):
-    TRChatBase(update.from_user.id, update.text, "deletethumbnail")
-    if str(update.from_user.id) in Config.BANNED_USERS:
-        bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.ABUSIVE_USERS,
-            reply_to_message_id=update.message_id,
-            disable_web_page_preview=True,
-            parse_mode=pyrogram.ParseMode.HTML
-        )
-        return
-    download_location = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id)
-    try:
-        os.remove(download_location + ".jpg")
-        # os.remove(download_location + ".json")
-    except:
-        pass
-    bot.send_message(
-        chat_id=update.chat.id,
-        text=Translation.DEL_ETED_CUSTOM_THUMB_NAIL,
-        reply_to_message_id=update.message_id
-    )
